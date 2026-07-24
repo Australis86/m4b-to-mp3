@@ -62,10 +62,12 @@ function extract_chapters() {
     # Use ffprobe to read the metadata and audiobook chapters and output it as JSON
     metajson=`ffprobe -of json -show_entries format_tags -i "$audiobook" -loglevel error -print_format json -show_chapters`
        
+    # Uncomment this line for debugging audiobook metadata
+    #echo $metajson | jq .format.tags
+
     # Extract audiobook metadata to add to individual MP3s
     # Use of select stops string "null" ending up in ID3v2 tags if a field isn't present
     bookjson=`echo $metajson | jq .format.tags`
-    echo $metajson | jq .format.tags
     booktitle=`echo $bookjson | jq -r 'select(.title != null) | .title'`
     artist=`echo $bookjson | jq -r 'select(.artist != null) | .artist'`
     albumartist=`echo $bookjson | jq -r 'select(.album_artist != null) | .album_artist'`
