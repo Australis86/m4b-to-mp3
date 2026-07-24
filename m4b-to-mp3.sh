@@ -17,18 +17,20 @@ where:
     -b  target MP3 bitrate in kbps (default 192)
     -g  set a custom genre (default is to use the M4B genre field)
     -c  write files as [CHAPTER NUM] [CHAPTER TITLE] rather than [CHAPTER NUM] [BOOK TITLE], [CHAPTER TITLE]
+    -d  create a subdirectory for the MP3 files based on the album field (based on use of -t option)
     -s  swap album artist and artist fields
     -t  set the MP3 album to the M4B fields [SHOW TITLE] [EPISODE]: [TITLE] instead of [ALBUM]
     -o  overwrite existing file
     -v  enabled verbose (debugging) output
     
-Files are output to the source directory."
+Files are output to the source audiobook directory."
 
 
 # GLOBALS
 
 VERBOSE=false
 FULL_TITLE=true
+SUBDIR=false
 BITRATE=192
 GENRE=""
 SWAP_ARTISTS=false
@@ -56,7 +58,7 @@ function extract_chapters() {
        
     # Extract path to audiobook
     target_dir=`dirname "$audiobook"`
-
+    
     # Use ffprobe to read the metadata and audiobook chapters and output it as JSON
     metajson=`ffprobe -of json -show_entries format_tags -i "$audiobook" -loglevel error -print_format json -show_chapters`
        
@@ -78,6 +80,17 @@ function extract_chapters() {
         # Use the album field provided by the audiobook (default)
         album=`echo $bookjson | jq -r 'select(.album != null) | .album'`
     fi
+    
+    if $SUBDIR
+    then
+        # Remove the colon added if using the show title and episode number
+        full_path="$target_dir/${album//:/}"
+        
+        # Create subdirectory for MP3 files
+        mkdir -p "$full_path"
+        target_dir="$full_path"
+    fi
+    if $VERBOSE; then echo "Output path set to $target_dir"; fi
 
     if [ -z "$GENRE" ]
     then
@@ -137,7 +150,7 @@ function extract_chapters() {
 
 # CLI
 
-while getopts ':hb:g:cstov' option; do
+while getopts ':hb:g:cdstov' option; do
   case "$option" in
     h) echo "$usage"
        exit
@@ -147,6 +160,8 @@ while getopts ':hb:g:cstov' option; do
     g) GENRE=$OPTARG
        ;;
     c) FULL_TITLE=false
+       ;;
+    d) SUBDIR=true
        ;;
     s) SWAP_ARTISTS=true
        ;;
