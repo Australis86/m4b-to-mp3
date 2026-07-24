@@ -28,6 +28,7 @@ Files are output to the source audiobook directory."
 
 # GLOBALS
 
+EXIT_CODE=0
 VERBOSE=false
 FULL_TITLE=true
 SUBDIR=false
@@ -55,6 +56,7 @@ function validate_audio() {
 
 function extract_chapters() {
     audiobook=$1
+    local_exit_code=0
        
     # Extract path to audiobook
     target_dir=`dirname "$audiobook"`
@@ -106,7 +108,7 @@ function extract_chapters() {
     if $VERBOSE; then echo "$cnum chapter(s) detected"; fi
     
     # Iterate through the chapters
-    echo $metajson | jq -c .chapters[] | while read chapter; do
+    while read chapter; do
         track_num=`echo $chapter | jq -r '.id | tonumber | .+1'`
 
         # Build the chapter name string as [CHAPTER NUM] [CHAPTER TITLE] -- e.g. "01 Hello, World"
@@ -126,6 +128,7 @@ function extract_chapters() {
         if [ -f "${target_dir}/${track_name}.mp3" ] && [ $OVERWRITE == "false" ]
         then
             echo "$target_dir/$track_name.mp3 already exists"
+            local_exit_code=73
         else
             echo "Creating $target_dir/$track_name.mp3 ..."
 
@@ -145,7 +148,9 @@ function extract_chapters() {
                 id3v2 --TPE1 "$artist" --TPE2 "$albumartist" "$target_dir/$track_name.mp3"
             fi
         fi
-    done
+    done <<< $(echo $metajson | jq -c .chapters[])
+    
+    return $local_exit_code
 }
 
 
@@ -197,6 +202,7 @@ if $VERBOSE; then echo "MP3 encoding bitrate set to ${BITRATE}kbps"; fi
 for file in "$@"; do
     if [ ! -f "$file" ]; then
         echo "Warning: '$file' not found, skipping" >&2
+        if [ $EXIT_CODE -eq 0 ]; then EXIT_CODE=66; fi
         continue
     fi
     
@@ -207,9 +213,13 @@ for file in "$@"; do
     then
        # Probe file and extract metadata and chapters
        extract_chapters "$file"
+       ec=$?
+       if [ $EXIT_CODE -eq 0 ]; then EXIT_CODE=$ec; fi
     else
        echo "$file does not appear to be an M4A audio format"
+       if [ $EXIT_CODE -eq 0 ]; then EXIT_CODE=65; fi
        continue
     fi
 done
 
+exit $EXIT_CODE
