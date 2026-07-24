@@ -3,6 +3,12 @@
 # Dependencies:
 #   ffmpeg id3v2 jq
 #
+# Copyright 2026 Joshua White
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
 
 usage="$(basename "$0") [-h] input_file(s) -- script to split an M4B audiobook by chapters and convert to MP3
 
