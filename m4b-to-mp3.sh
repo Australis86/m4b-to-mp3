@@ -75,16 +75,20 @@ function extract_chapters() {
     albumartist=`echo $bookjson | jq -r 'select(.album_artist != null) | .album_artist'`
     albumdate=`echo $bookjson | jq -r 'select(.date != null) | .date'`
     composer=`echo $bookjson | jq -r 'select(.composer != null) | .composer'`
+    album=""
 
     if $SHOW_TITLE
     then
         # Use the show title, episode number and episode title for the album
         album=`echo $bookjson | jq -r '(select(.show != null) | .show) + " " + (select(.episode_sort != null) | .episode_sort) + ": " + (select(.title != null) | .title)'`
-    else
+    fi
+
+    if [ -z "$album" ]
+    then
         # Use the album field provided by the audiobook (default)
         album=`echo $bookjson | jq -r 'select(.album != null) | .album'`
     fi
-    
+  
     if $SUBDIR
     then
         # Remove the colon added if using the show title and episode number
