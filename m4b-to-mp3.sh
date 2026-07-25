@@ -162,6 +162,22 @@ function extract_chapters() {
         # Use the book metadata for the filename
         track_name=$booktitle
         track_title=$booktitle
+        track_str=`echo $bookjson | jq -r 'select(.track != null) | .track'`
+        track_num=1
+
+        # If the metadata includes a tracknumber in the form of track/total, then prefix a track number
+        if [[ "$track_str" =~ "/" ]]
+        then
+            if $VERBOSE; then echo "Multi-part track number detected: $track_str"; fi
+            track_total=`echo $bookjson | jq -r '.track | split("/")[1]'`
+
+            if [[ "$track_total" != "1" ]]
+            then
+                digits=$((${#track_total}+1))
+                track_name=`echo $bookjson | jq --argjson digits "$digits" --arg booktitle "$booktitle" -r 'include "jq_filters"; (.track | split("/")[0] | tonumber | pad_left($digits)) + " " + $booktitle'`
+                track_num=`echo $bookjson | jq -r '.track | split("/")[0] | tonumber'`
+            fi
+        fi
 
         if [ -f "${target_dir}/${track_name}.mp3" ] && [ $OVERWRITE == "false" ]
         then
@@ -174,7 +190,7 @@ function extract_chapters() {
             </dev/null ffmpeg -y -loglevel error -i "$audiobook" -codec:a libmp3lame -ab ${BITRATE}k "$target_dir/$track_name.mp3"
             
             # Set ID3v2 tags
-            id3v2 --song "$track_title" --album "$album" --track 1 -g "$GENRE" -y "$albumdate" --TCOM "$composer" "$target_dir/$track_name.mp3"
+            id3v2 --song "$track_title" --album "$album" --track $track_num -g "$GENRE" -y "$albumdate" --TCOM "$composer" "$target_dir/$track_name.mp3"
             
             if $SWAP_ARTISTS
             then
