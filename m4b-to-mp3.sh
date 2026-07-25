@@ -105,26 +105,60 @@ function extract_chapters() {
     # Count chapters
     cnum=`echo $metajson | jq '.chapters | length'`
     digits=$((${#cnum}+1))
-    if $VERBOSE; then echo "$cnum chapter(s) detected"; fi
     
-    # Iterate through the chapters
-    while read chapter; do
-        track_num=`echo $chapter | jq -r '.id | tonumber | .+1'`
+    if [ "$cnum" -gt 0 ]
+    then
+        if $VERBOSE; then echo "$cnum chapter(s) detected"; fi
 
-        # Build the chapter name string as [CHAPTER NUM] [CHAPTER TITLE] -- e.g. "01 Hello, World"
-        chapter_name=`echo $chapter | jq --argjson digits "$digits" -r 'include "jq_filters"; (.id | tonumber | .+1 | pad_left($digits)) + " " + .tags.title'`
+        # Iterate through the chapters
+        while read chapter; do
+            track_num=`echo $chapter | jq -r '.id | tonumber | .+1'`
 
-        # Radio plays and audio dramas (typically broken into multiple parts with the chapter title as Part #N)
-        # Create the name as [CHAPTER NUM] [BOOK TITLE], [CHAPTER TITLE] -- eg. "01 The Sirens of Time, Part 1"
-        if $FULL_TITLE && [[ "$chapter_name" =~ "Part" ]]
-        then
-            track_name=`echo $chapter | jq --argjson digits "$digits" --arg booktitle "$booktitle" -r 'include "jq_filters"; (.id | tonumber | .+1 | pad_left($digits)) + " " + $booktitle + ", " + .tags.title'`
-            track_title=`echo $chapter | jq --arg booktitle "$booktitle" -r '$booktitle + ", " + .tags.title'`
-        else
-            track_name=$chapter_name
-            track_title=`echo $chapter | jq -r .tags.title`
-        fi
+            # Build the chapter name string as [CHAPTER NUM] [CHAPTER TITLE] -- e.g. "01 Hello, World"
+            chapter_name=`echo $chapter | jq --argjson digits "$digits" -r 'include "jq_filters"; (.id | tonumber | .+1 | pad_left($digits)) + " " + .tags.title'`
+
+            # Radio plays and audio dramas (typically broken into multiple parts with the chapter title as Part #N)
+            # Create the name as [CHAPTER NUM] [BOOK TITLE], [CHAPTER TITLE] -- eg. "01 The Sirens of Time, Part 1"
+            if $FULL_TITLE && [[ "$chapter_name" =~ "Part" ]]
+            then
+                track_name=`echo $chapter | jq --argjson digits "$digits" --arg booktitle "$booktitle" -r 'include "jq_filters"; (.id | tonumber | .+1 | pad_left($digits)) + " " + $booktitle + ", " + .tags.title'`
+                track_title=`echo $chapter | jq --arg booktitle "$booktitle" -r '$booktitle + ", " + .tags.title'`
+            else
+                track_name=$chapter_name
+                track_title=`echo $chapter | jq -r .tags.title`
+            fi
+            
+            if [ -f "${target_dir}/${track_name}.mp3" ] && [ $OVERWRITE == "false" ]
+            then
+                echo "$target_dir/$track_name.mp3 already exists"
+                local_exit_code=73
+            else
+                echo "Creating $target_dir/$track_name.mp3 ..."
+
+                # Build ffmpeg command
+                chapter_split=`echo $chapter | jq -r '"-ss " + .start_time + " -to " + .end_time'`
+
+                # This must be piped to dev/null or ffmpeg messes with the JSON in the loop
+                </dev/null ffmpeg -y -loglevel error -i "$audiobook" $chapter_split -codec:a libmp3lame -ab ${BITRATE}k "$target_dir/$track_name.mp3"
+                
+                # Set ID3v2 tags
+                id3v2 --song "$track_title" --album "$album" --track $track_num -g "$GENRE" -y "$albumdate" --TCOM "$composer" "$target_dir/$track_name.mp3"
+                
+                if $SWAP_ARTISTS
+                then
+                    id3v2 --TPE1 "$albumartist" --TPE2 "$artist" "$target_dir/$track_name.mp3"
+                else
+                    id3v2 --TPE1 "$artist" --TPE2 "$albumartist" "$target_dir/$track_name.mp3"
+                fi
+            fi
+        done <<< $(echo $metajson | jq -c .chapters[])
+    else
+        echo "No chapters detected; converting entire file to MP3..."
         
+        # Use the book metadata for the filename
+        track_name=$booktitle
+        track_title=$booktitle
+
         if [ -f "${target_dir}/${track_name}.mp3" ] && [ $OVERWRITE == "false" ]
         then
             echo "$target_dir/$track_name.mp3 already exists"
@@ -132,14 +166,11 @@ function extract_chapters() {
         else
             echo "Creating $target_dir/$track_name.mp3 ..."
 
-            # Build ffmpeg command
-            chapter_split=`echo $chapter | jq -r '"-ss " + .start_time + " -to " + .end_time'`
-
             # This must be piped to dev/null or ffmpeg messes with the JSON in the loop
-            </dev/null ffmpeg -y -loglevel error -i "$audiobook" $chapter_split -codec:a libmp3lame -ab ${BITRATE}k "$target_dir/$track_name.mp3"
+            </dev/null ffmpeg -y -loglevel error -i "$audiobook" -codec:a libmp3lame -ab ${BITRATE}k "$target_dir/$track_name.mp3"
             
             # Set ID3v2 tags
-            id3v2 --song "$track_title" --album "$album" --track $track_num -g "$GENRE" -y "$albumdate" --TCOM "$composer" "$target_dir/$track_name.mp3"
+            id3v2 --song "$track_title" --album "$album" --track 1 -g "$GENRE" -y "$albumdate" --TCOM "$composer" "$target_dir/$track_name.mp3"
             
             if $SWAP_ARTISTS
             then
@@ -148,7 +179,7 @@ function extract_chapters() {
                 id3v2 --TPE1 "$artist" --TPE2 "$albumartist" "$target_dir/$track_name.mp3"
             fi
         fi
-    done <<< $(echo $metajson | jq -c .chapters[])
+    fi
     
     return $local_exit_code
 }
