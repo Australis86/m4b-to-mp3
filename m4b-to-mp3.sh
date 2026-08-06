@@ -120,10 +120,13 @@ function extract_chapters() {
 
             # Build the chapter name string as [CHAPTER NUM] [CHAPTER TITLE] -- e.g. "01 Hello, World"
             chapter_name=`echo $chapter | jq --argjson digits "$digits" -r 'include "jq_filters"; (.id | tonumber | .+1 | pad_left($digits)) + " " + .tags.title'`
+            
+            # Check that the booktitle isn't the same as the chapter title (sometimes happens with M4Bs that are sample chapters/episodes)
+            chapter_title=`echo $chapter | jq -r '.tags.title'`
 
             # Radio plays and audio dramas (typically broken into multiple parts with the chapter title as Part #N)
             # Create the name as [CHAPTER NUM] [BOOK TITLE], [CHAPTER TITLE] -- eg. "01 The Sirens of Time, Part 1"
-            if $FULL_TITLE && [[ "$chapter_name" =~ "Part" ]]
+            if $FULL_TITLE && [[ "$chapter_name" =~ "Part" ]] && [[ "$chapter_title" != "$booktitle" ]]
             then
                 track_name=`echo $chapter | jq --argjson digits "$digits" --arg booktitle "$booktitle" -r 'include "jq_filters"; (.id | tonumber | .+1 | pad_left($digits)) + " " + $booktitle + ", " + .tags.title'`
                 track_title=`echo $chapter | jq --arg booktitle "$booktitle" -r '$booktitle + ", " + .tags.title'`
